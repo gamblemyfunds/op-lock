@@ -1,47 +1,70 @@
+-- Original link : https://github.com/Stefanuk12/ROBLOX/blob/master/Games/Da%20Hood/SilentAimAimLock.lua
+-- reuploaded so it will be still alive if removed
+getgenv().SilentAim = true -- true or false
+getgenv().AimLock = true -- true or false
+getgenv().Prediction = 0.165 -- Prediction of Silent Aim and AimLock
+getgenv().AimLockKeybind = Enum.KeyCode.E -- Keybind for AIMLOCK (NOT SILENT AIM)
+
 -- // Dependencies
-local Aiming = loadstring(game:HttpGet("https://raw.githubusercontent.com/Stefanuk12/Aiming/main/Examples/AimLock.lua"))()
-local AimingChecks = Aiming.Checks
-local AimingSelected = Aiming.Selected
-local AimLockSettings = Aiming.AimLock
+local Aiming = loadstring(game:HttpGet("https://raw.githubusercontent.com/RapperDeluxe/scripts/main/silent%20aim%20module"))()
+Aiming.TeamCheck(false)
 
 -- // Services
 local Workspace = game:GetService("Workspace")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 
 -- // Vars
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
 local CurrentCamera = Workspace.CurrentCamera
 
 local DaHoodSettings = {
-    Prediction = 0.165,
-
-    SilentAim = true,
-
-    AimLock = AimLockSettings,
-    BeizerLock = {
-        Smoothness = 0.05,
-        CurvePoints = {
-            Vector2.new(0.83, 0),
-            Vector2.new(0.17, 1)
-        }
-    }
+    SilentAim = getgenv().SilentAim,
+    AimLock = getgenv().AimLock,
+    Prediction = getgenv().Prediction,
+    AimLockKeybind = Enum.KeyCode.E
 }
 getgenv().DaHoodSettings = DaHoodSettings
 
--- //
-function DaHoodSettings.ApplyPredictionFormula(SelectedPart, Velocity)
-    return SelectedPart.CFrame + (Velocity * DaHoodSettings.Prediction)
+-- // Overwrite to account downed
+function Aiming.Check()
+    -- // Check A
+    if not (Aiming.Enabled == true and Aiming.Selected ~= LocalPlayer and Aiming.SelectedPart ~= nil) then
+        return false
+    end
+
+    -- // Check if downed
+    local Character = Aiming.Character(Aiming.Selected)
+    local KOd = Character:WaitForChild("BodyEffects")["K.O"].Value
+    local Grabbed = Character:FindFirstChild("GRABBING_CONSTRAINT") ~= nil
+
+    -- // Check B
+    if (KOd or Grabbed) then
+        return false
+    end
+
+    -- //
+    return true
 end
 
 -- // Hook
 local __index
 __index = hookmetamethod(game, "__index", function(t, k)
     -- // Check if it trying to get our mouse's hit or target and see if we can use it
-    if (t:IsA("Mouse") and (k == "Hit" or k == "Target") and AimingChecks.IsAvailable() and DaHoodSettings.SilentAim) then
+    if (t:IsA("Mouse") and (k == "Hit" or k == "Target") and Aiming.Check()) then
         -- // Vars
-        local SelectedPart = AimingSelected.Part
-        local Hit = DaHoodSettings.ApplyPredictionFormula(SelectedPart, AimingSelected.Velocity * Vector3.new(1, 0.1, 1))
+        local SelectedPart = Aiming.SelectedPart
 
-        -- // Return modded val
-        return (k == "Hit" and Hit or SelectedPart)
+        -- // Hit/Target
+        if (DaHoodSettings.SilentAim and (k == "Hit" or k == "Target")) then
+            -- // Hit to account prediction
+            local Hit = SelectedPart.CFrame + (SelectedPart.Velocity * DaHoodSettings.Prediction)
+
+            -- // Return modded val
+            return (k == "Hit" and Hit or SelectedPart)
+        end
     end
 
     -- // Return
@@ -49,37 +72,15 @@ __index = hookmetamethod(game, "__index", function(t, k)
 end)
 
 -- // Aimlock
-function AimLockSettings.AimLockPosition(CameraMode)
-    -- // Vars
-    local Position
-    local BeizerData = {}
-
-    -- // Hit to account prediction
-    local Hit = DaHoodSettings.ApplyPredictionFormula(AimingSelected.Part)
-    local HitPosition = Hit.Position
-
-    -- //
-    if (CameraMode) then
-        Position = HitPosition
-    else
-        -- // Convert 3d -> 2d
-        local Vector, _ = CurrentCamera:WorldToViewportPoint(HitPosition)
-        local Vector2D = Vector2.new(Vector.X, Vector.Y)
-
+RunService:BindToRenderStep("AimLock", 0, function()
+    if (DaHoodSettings.AimLock and Aiming.Check() and UserInputService:IsKeyDown(DaHoodSettings.AimLockKeybind)) then
         -- // Vars
-        local BeizerLock = DaHoodSettings.BeizerLock
+        local SelectedPart = Aiming.SelectedPart
 
-        -- //
-        Position = Vector2D
-        BeizerData = {
-            Smoothness = BeizerLock.Smoothness,
-            CurvePoints = BeizerLock.CurvePoints
-        }
+        -- // Hit to account prediction
+        local Hit = SelectedPart.CFrame + (SelectedPart.Velocity * DaHoodSettings.Prediction)
+
+        -- // Set the camera to face towards the Hit
+        CurrentCamera.CFrame = CFrame.lookAt(CurrentCamera.CFrame.Position, Hit.Position)
     end
-
-    -- // Return
-    return Position, BeizerData
-end
-
--- // Return
-return DaHoodSettings
+end)
